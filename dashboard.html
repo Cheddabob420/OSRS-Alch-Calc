@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSRS High Alch Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 30px;
+        }
+        .header {
+            background-color: #1e1e1e;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 5px solid #ff9800;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        h1 { margin: 0 0 10px 0; color: #ff9800; font-size: 28px; }
+        .meta-info { color: #aaa; font-size: 14px; display: flex; gap: 20px; }
+        .meta-info span strong { color: #fff; }
+        .controls { margin-bottom: 20px; }
+        input[type="text"] {
+            padding: 12px;
+            width: 100%;
+            max-width: 400px;
+            border-radius: 6px;
+            border: 1px solid #444;
+            background-color: #1e1e1e;
+            color: #fff;
+            font-size: 16px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #1e1e1e;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        th, td { padding: 14px 18px; text-align: left; }
+        th { background-color: #2a2a2a; color: #ff9800; font-weight: 600; text-transform: uppercase; font-size: 13px; }
+        tr { border-bottom: 1px solid #2d2d2d; }
+        tr:hover { background-color: #252525; }
+        .profit-text { color: #4caf50; font-weight: bold; }
+        .price-text { color: #bb86fc; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>OSRS High Alch Live Finder</h1>
+        <div class="meta-info">
+            <span>Last Updated: <strong id="updateTime">Loading...</strong></span>
+            <span>Nature Rune Cost: <strong id="natCost">Loading...</strong></span>
+        </div>
+    </div>
+
+    <div class="controls">
+        <input type="text" id="searchBar" placeholder="Filter by item name...">
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Item Name</th>
+                <th>Estimated Profit</th>
+                <th>GE Buy Price (Low)</th>
+                <th>Alch Value</th>
+                <th>Buy Limit</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody">
+            <tr>
+                <td colspan="5" style="text-align: center; color: #888;">Loading local JSON data...</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <script>
+        let allItems = [];
+
+        // Fetch data from the locally generated JSON file
+        async function loadDashboardData() {
+            try {
+                // Fetching the local file in the same directory
+                const response = await fetch('live_alchs.json');
+                if (!response.ok) throw new Error("JSON file not found yet.");
+
+                const data = await response.json();
+
+                // Update header metrics
+                document.getElementById('updateTime').innerText = data.last_updated;
+                document.getElementById('natCost').innerText = data.nature_rune_cost.toLocaleString() + " gp";
+
+                allItems = data.items;
+                renderTable(allItems);
+            } catch (err) {
+                console.error(err);
+                document.getElementById('tableBody').innerHTML = `<tr><td colspan="5" style="text-align: center; color: #f44336;">Failed to load data. Ensure dashboard_updater.py has run at least once.</td></tr>`;
+            }
+        }
+
+        function renderTable(items) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = "";
+
+            if(items.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #888;">No profitable items found matching that filter.</td></tr>`;
+                return;
+            }
+
+            items.forEach(item => {
+                const row = `<tr>
+                    <td><strong>${item.name}</strong></td>
+                    <td class="profit-text">+${item.profit.toLocaleString()} gp</td>
+                    <td class="price-text">${item.buy_price.toLocaleString()} gp</td>
+                    <td>${item.alch_value.toLocaleString()} gp</td>
+                    <td>${item.limit.toLocaleString()}</td>
+                </tr>`;
+                tbody.insertAdjacentHTML('beforeend', row);
+            });
+        }
+
+        // Live Search Filter
+        document.getElementById('searchBar').addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const filtered = allItems.filter(item => item.name.toLowerCase().includes(query));
+            renderTable(filtered);
+        });
+
+        // Load initially on open
+        loadDashboardData();
+        // Check for file modifications every 30 seconds to update browser seamlessly
+        setInterval(loadDashboardData, 30000);
+    </script>
+</body>
+</html>
