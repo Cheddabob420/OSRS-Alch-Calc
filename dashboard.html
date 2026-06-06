@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OSRS High Alch Dashboard</title>
+    <title>OSRS Ultimate Market Dashboard</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -21,9 +21,10 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
         h1 { margin: 0 0 10px 0; color: #ff9800; font-size: 28px; }
+        h2 { color: #ff9800; margin-top: 40px; margin-bottom: 15px; font-size: 22px; border-bottom: 1px solid #333; padding-bottom: 5px; }
         .meta-info { color: #aaa; font-size: 14px; display: flex; gap: 20px; }
         .meta-info span strong { color: #fff; }
-        .controls { margin-bottom: 20px; }
+        .controls { margin-top: 30px; margin-bottom: 20px; }
         input[type="text"] {
             padding: 12px;
             width: 100%;
@@ -41,29 +42,51 @@
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
         }
         th, td { padding: 14px 18px; text-align: left; }
         th { background-color: #2a2a2a; color: #ff9800; font-weight: 600; text-transform: uppercase; font-size: 13px; }
         tr { border-bottom: 1px solid #2d2d2d; }
         tr:hover { background-color: #252525; }
         .profit-text { color: #4caf50; font-weight: bold; }
+        .loss-text { color: #f44336; font-weight: bold; }
         .price-text { color: #bb86fc; }
+        .type-badge { color: #aaa; font-size: 13px; background-color: #2d2d2d; padding: 3px 8px; border-radius: 4px; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <h1>OSRS High Alch Live Finder</h1>
+        <h1>OSRS Live Command Center</h1>
         <div class="meta-info">
             <span>Last Updated: <strong id="updateTime">Loading...</strong></span>
             <span>Nature Rune Cost: <strong id="natCost">Loading...</strong></span>
         </div>
     </div>
 
+    <h2>Live Skilling Margins (Herbs & Unf Potions)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Activity Name</th>
+                <th>Method Type</th>
+                <th>Profit per Action</th>
+                <th>Total Input Cost</th>
+                <th>Insta-Sell Revenue</th>
+            </tr>
+        </thead>
+        <tbody id="processingTableBody">
+            <tr>
+                <td colspan="5" style="text-align: center; color: #888;">Loading local skilling data...</td>
+            </tr>
+        </tbody>
+    </table>
+
     <div class="controls">
-        <input type="text" id="searchBar" placeholder="Filter by item name...">
+        <input type="text" id="searchBar" placeholder="Filter high alch items by name...">
     </div>
 
+    <h2>Top High Alch Opportunities</h2>
     <table>
         <thead>
             <tr>
@@ -74,43 +97,49 @@
                 <th>Buy Limit</th>
             </tr>
         </thead>
-        <tbody id="tableBody">
+        <tbody id="alchTableBody">
             <tr>
-                <td colspan="5" style="text-align: center; color: #888;">Loading local JSON data...</td>
+                <td colspan="5" style="text-align: center; color: #888;">Loading local alch data...</td>
             </tr>
         </tbody>
     </table>
 
     <script>
-        let allItems = [];
+        let allAlchItems = [];
 
-        // Fetch data from the locally generated JSON file
         async function loadDashboardData() {
             try {
-                // Fetching the local file in the same directory
                 const response = await fetch('live_alchs.json');
-                if (!response.ok) throw new Error("JSON file not found yet.");
-
+                if (!response.ok) throw new Error("JSON file empty or not generated yet.");
+                
                 const data = await response.json();
-
+                
                 // Update header metrics
                 document.getElementById('updateTime').innerText = data.last_updated;
                 document.getElementById('natCost').innerText = data.nature_rune_cost.toLocaleString() + " gp";
+                
+                // Render Skilling / Processing Items Table (Top)
+                renderProcessingTable(data.processing_items || []);
 
-                allItems = data.items;
-                renderTable(allItems);
+                // Cache and Render Alch Items Table (Bottom)
+                allAlchItems = data.alch_items || [];
+                renderAlchTable(allAlchItems);
+                
             } catch (err) {
                 console.error(err);
-                document.getElementById('tableBody').innerHTML = `<tr><td colspan="5" style="text-align: center; color: #f44336;">Failed to load data. Ensure dashboard_updater.py has run at least once.</td></tr>`;
+                const errorRow = `<tr><td colspan="5" style="text-align: center; color: #f44336;">Error reading live_alchs.json. Ensure your loop script is active.</td></tr>`;
+                document.getElementById('alchTableBody').innerHTML = errorRow;
+                document.getElementById('processingTableBody').innerHTML = errorRow;
             }
         }
 
-        function renderTable(items) {
-            const tbody = document.getElementById('tableBody');
+        // Render High Alch Rows
+        function renderAlchTable(items) {
+            const tbody = document.getElementById('alchTableBody');
             tbody.innerHTML = "";
 
-            if(items.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #888;">No profitable items found matching that filter.</td></tr>`;
+            if (items.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #888;">No matching alch items found.</td></tr>`;
                 return;
             }
 
@@ -126,16 +155,42 @@
             });
         }
 
-        // Live Search Filter
+        // Render Skilling / Recipe Rows
+        function renderProcessingTable(items) {
+            const tbody = document.getElementById('processingTableBody');
+            tbody.innerHTML = "";
+
+            if (items.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #888;">No active skilling data available.</td></tr>`;
+                return;
+            }
+
+            items.forEach(item => {
+                const profitClass = item.profit > 0 ? 'profit-text' : 'loss-text';
+                const sign = item.profit > 0 ? '+' : '';
+
+                const row = `<tr>
+                    <td><strong>${item.name}</strong></td>
+                    <td><span class="type-badge">${item.type}</span></td>
+                    <td class="${profitClass}">${sign}${item.profit.toLocaleString()} gp</td>
+                    <td>${item.buy_price.toLocaleString()} gp</td>
+                    <td class="price-text">${item.sell_price.toLocaleString()} gp</td>
+                </tr>`;
+                tbody.insertAdjacentHTML('beforeend', row);
+            });
+        }
+
+        // Real-time keyword filter for alch items
         document.getElementById('searchBar').addEventListener('input', (e) => {
             const query = e.target.value.toLowerCase();
-            const filtered = allItems.filter(item => item.name.toLowerCase().includes(query));
-            renderTable(filtered);
+            const filtered = allAlchItems.filter(item => item.name.toLowerCase().includes(query));
+            renderAlchTable(filtered);
         });
 
-        // Load initially on open
+        // Initial launch
         loadDashboardData();
-        // Check for file modifications every 30 seconds to update browser seamlessly
+        
+        // Auto-refresh layout components silently every 30 seconds
         setInterval(loadDashboardData, 30000);
     </script>
 </body>
