@@ -1,3 +1,5 @@
+#!/home/pi/.venv/bin/python3
+
 import json
 import requests
 
@@ -74,6 +76,67 @@ def find_alch_opportunities(alch_prices):
     profitable_items.sort(key=lambda x: x["profit"], reverse=True)
     return profitable_items, nat_rune_cost
 
+def calculate_processing_profits(live_prices):
+    """
+    Takes the live prices data block and runs a recipe-based 
+    margin analysis for cleaning herbs and making unfinished potions.
+    """
+    if not live_prices:
+        return []
+
+    # Map out recipes explicitly by Item ID (No name searching errors!)
+    recipes = [
+        # --- HERB CLEANING RECIPES ---
+        {"name": "Clean Ranarr Weed", "input_id": "207", "output_id": "257", "type": "Herb Cleaning"},
+        {"name": "Clean Avantoe", "input_id": "211", "output_id": "261", "type": "Herb Cleaning"},
+        {"name": "Clean Toadflax", "input_id": "3049", "output_id": "2998", "type": "Herb Cleaning"},
+        {"name": "Clean Snapdragon", "input_id": "3051", "output_id": "3000", "type": "Herb Cleaning"},
+        {"name": "Clean Torstol", "input_id": "219", "output_id": "269", "type": "Herb Cleaning"},
+        {"name": "Clean Kwuarm", "input_id": "213", "output_id": "263", "type": "Herb Cleaning"},
+        
+        # --- UNFINISHED POTION RECIPES --- (Input: Clean Herb + Vial of Water [227])
+        {"name": "Ranarr unf pot", "input_id": "257", "output_id": "91", "type": "Unf Potion", "needs_vial": True},
+        {"name": "Toadflax unf pot", "input_id": "2998", "output_id": "3002", "type": "Unf Potion", "needs_vial": True},
+        {"name": "Snapdragon unf pot", "input_id": "3000", "output_id": "3004", "type": "Unf Potion", "needs_vial": True},
+        {"name": "Avantoe unf pot", "input_id": "261", "output_id": "97", "type": "Unf Potion", "needs_vial": True},
+        {"name": "Torstol unf pot", "input_id": "269", "output_id": "111", "type": "Unf Potion", "needs_vial": True}
+    ]
+
+    VIAL_OF_WATER_ID = "227"
+    # Buy vials instantly (high)
+    vial_cost = live_prices.get(VIAL_OF_WATER_ID, {}).get("high", 3) 
+
+    processing_results = []
+
+    for recipe in recipes:
+        # Get input cost (instant buy = high)
+        input_cost = live_prices.get(recipe["input_id"], {}).get("high")
+        # Get output revenue (instant sell = low)
+        output_revenue = live_prices.get(recipe["output_id"], {}).get("low")
+
+        # Skip if either item doesn't have active live trading data right now
+        if not input_cost or not output_revenue:
+            continue
+
+        # Adjust cost if it's an unfinished potion requiring a vial of water
+        total_input_cost = input_cost
+        if recipe.get("needs_vial"):
+            total_input_cost += vial_cost
+
+        # Calculate pure margin
+        profit = output_revenue - total_input_cost
+
+        processing_results.append({
+            "name": recipe["name"],
+            "type": recipe["type"],
+            "profit": profit,
+            "buy_price": total_input_cost,
+            "sell_price": output_revenue
+        })
+
+    # Sort processing margins from highest to lowest profit
+    processing_results.sort(key=lambda x: x["profit"], reverse=True)
+    return processing_results
 
 
 if __name__ == "__main__":
